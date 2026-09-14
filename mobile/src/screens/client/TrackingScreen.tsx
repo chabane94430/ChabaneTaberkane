@@ -108,6 +108,22 @@ export function TrackingScreen({ route, navigation }: Props) {
     );
   }
 
+  if (request.status === "CANCELLED") {
+    const noLocksmithFound = request.cancelReason === "NO_LOCKSMITH_AVAILABLE";
+    return (
+      <View style={styles.center}>
+        <Text style={styles.title}>{noLocksmithFound ? "Aucun serrurier disponible" : "Demande annulée"}</Text>
+        <Text style={styles.subtitle}>
+          {noLocksmithFound
+            ? "Aucun serrurier n'a pu être trouvé près de chez vous pour le moment. Réessayez dans quelques minutes."
+            : "Cette demande a été annulée."}
+        </Text>
+        <View style={{ height: spacing.lg }} />
+        <Button label="Nouvelle demande" onPress={() => navigation.replace("NewRequest")} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <MapView

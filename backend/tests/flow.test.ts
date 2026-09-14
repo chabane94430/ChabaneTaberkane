@@ -15,6 +15,13 @@ let locksmithId: string;
 let requestId: string;
 
 describe("locksmith marketplace flow", () => {
+  beforeAll(async () => {
+    // Other test files share the same dev.db and may leave locksmiths online —
+    // start from a clean slate so "notified 1 locksmith" style assertions hold
+    // regardless of test file execution order.
+    await prisma.locksmithProfile.updateMany({ data: { isOnline: false } });
+  });
+
   it("registers a client", async () => {
     const res = await request(app).post("/auth/register").send({
       email: clientEmail,

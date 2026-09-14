@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { distanceKm, estimatePrice } from "../utils/geo";
 import { emitToUser } from "../sockets/index";
 import { config } from "../config";
+import { startMatching, stopMatching } from "../matching";
 
 export const requestsRouter = Router();
 requestsRouter.use(requireAuth);
@@ -51,6 +52,13 @@ requestsRouter.post("/", requireRole("CLIENT"), async (req, res) => {
   for (const locksmith of nearby) {
     emitToUser(locksmith.userId, "request:new", serializeRequestForLocksmith(request, locksmith.distanceKm));
   }
+  // If nobody accepts in time, this keeps re-broadcasting with a wider radius until
+  // someone does, or gives up and auto-cancels the request (see src/matching.ts).
+  startMatching(
+    request.id,
+    config.broadcastRadiusKm,
+    nearby.map((n) => n.userId)
+  );
 
   return res.status(201).json({ request, notifiedLocksmiths: nearby.length });
 });
@@ -108,6 +116,7 @@ requestsRouter.post("/:id/accept", requireRole("LOCKSMITH"), async (req, res) =>
   if (result.count === 0) {
     return res.status(409).json({ error: "Request no longer available" });
   }
+  stopMatching(id);
 
   const request = await prisma.serviceRequest.findUnique({ where: { id } });
   const locksmith = await prisma.user.findUnique({
@@ -162,6 +171,10 @@ requestsRouter.patch("/:id/status", async (req, res) => {
     return res.status(409).json({ error: "Locksmith must mark ARRIVED before COMPLETED" });
   }
 
+  if (status === "CANCELLED") {
+    stopMatching(request.id);
+  }
+
   const updated = await prisma.serviceRequest.update({
     where: { id: request.id },
     data: {
@@ -170,6 +183,7 @@ requestsRouter.patch("/:id/status", async (req, res) => {
       arrivedAt: status === "ARRIVED" ? new Date() : undefined,
       completedAt: status === "COMPLETED" ? new Date() : undefined,
       cancelledAt: status === "CANCELLED" ? new Date() : undefined,
+      cancelReason: status === "CANCELLED" ? (role === "CLIENT" ? "CLIENT_CANCELLED" : "LOCKSMITH_CANCELLED") : undefined,
     },
   });
 

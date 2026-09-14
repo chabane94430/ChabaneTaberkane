@@ -63,11 +63,12 @@ model ServiceRequest {
   priceEstimateMax Int?
   finalPrice       Int?
 
-  createdAt   DateTime  @default(now())
-  acceptedAt  DateTime?
-  arrivedAt   DateTime?
-  completedAt DateTime?
-  cancelledAt DateTime?
+  createdAt    DateTime  @default(now())
+  acceptedAt   DateTime?
+  arrivedAt    DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
+  cancelReason String? // CLIENT_CANCELLED | NO_LOCKSMITH_AVAILABLE
 
   review Review?
 }

@@ -57,6 +57,7 @@ export interface ServiceRequest {
   finalPrice?: number | null;
   createdAt: string;
   distanceKm?: number;
+  cancelReason?: "CLIENT_CANCELLED" | "LOCKSMITH_CANCELLED" | "NO_LOCKSMITH_AVAILABLE" | null;
 }
 
 export interface LocksmithSummary {

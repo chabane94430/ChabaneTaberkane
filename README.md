@@ -54,6 +54,11 @@ mobile/    Application mobile (React Native + Expo, TypeScript)
 2. Le serveur calcule la distance (formule de haversine) vers tous les
    serruriers actuellement en ligne et leur pousse l'événement WebSocket
    `request:new` s'ils sont dans le rayon configuré (`BROADCAST_RADIUS_KM`).
+   Si personne n'accepte dans les `ACCEPT_TIMEOUT_SECONDS`, le rayon
+   s'élargit automatiquement (`RADIUS_STEP_KM` par palier, jusqu'à
+   `MAX_RADIUS_KM`) et les serruriers nouvellement dans la zone sont notifiés
+   à leur tour ; si aucun serrurier n'est jamais trouvé, la demande est
+   automatiquement annulée (`backend/src/matching.ts`).
 3. Chaque serruriers intéressé appelle `POST /requests/:id/accept`. La mise à
    jour est **atomique** (`updateMany` conditionné sur `status: PENDING`) :
    seul le premier à accepter obtient la demande, les suivants reçoivent une
@@ -122,6 +127,13 @@ Puis ouvrez l'app dans Expo Go (scan du QR code) ou un simulateur iOS/Android.
 - Prix final saisi par le serrurier
 - Notation / avis après intervention, mise à jour de la note moyenne
 - Historique des demandes (client) et des gains (serrurier)
+- **Timeout + élargissement automatique du rayon de recherche** : si personne
+  n'accepte dans le délai `ACCEPT_TIMEOUT_SECONDS`, le rayon de diffusion
+  s'élargit par pas de `RADIUS_STEP_KM` (jusqu'à `MAX_RADIUS_KM`) et les
+  nouveaux serruriers en ligne dans la zone sont notifiés ; si personne n'est
+  jamais trouvé, la demande passe automatiquement en `CANCELLED` avec
+  `cancelReason: NO_LOCKSMITH_AVAILABLE`, et le client en est informé en
+  direct via WebSocket (voir `backend/src/matching.ts`)
 
 ## Pistes pour la suite
 
@@ -130,8 +142,7 @@ Puis ouvrez l'app dans Expo Go (scan du QR code) ou un simulateur iOS/Android.
 - Notifications push (Expo Notifications) en plus du WebSocket pour les
   alertes quand l'app est en arrière-plan
 - Chat texte client ↔ serrurier
-- Système d'annulation avec pénalité, timeout de la demande si personne
-  n'accepte, élargissement automatique du rayon de recherche
+- Système d'annulation avec pénalité en cas d'abandon tardif
 - Back-office admin (modération, litiges, tarifs par zone)
 - Migration PostgreSQL + déploiement (Docker/Fly.io/Render pour l'API,
   EAS Build pour publier l'app sur les stores)
