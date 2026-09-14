@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Serrurier Express",
+    "slug": "serrurier-express",
+    "version": "1.0.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#0F172A"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.chabanetaberkane.serrurierexpress",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Nous avons besoin de votre position pour vous mettre en relation avec un serrurier proche de vous, ou pour vous envoyer vers vos clients."
+      }
+    },
+    "android": {
+      "package": "com.chabanetaberkane.serrurierexpress",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Nous avons besoin de votre position pour cette fonctionnalité."
+        }
+      ]
+    ]
+  }
+}

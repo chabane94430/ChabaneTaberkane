@@ -1,0 +1,86 @@
+// Prisma schema for the locksmith on-demand marketplace.
+// SQLite is used for local/dev simplicity; swap the datasource to Postgres for production
+// (Postgres supports native enums — see src/types.ts for the string-literal unions these
+// fields are validated against at the API boundary via zod, since SQLite has no enum type).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String // "CLIENT" | "LOCKSMITH"
+  fullName     String
+  phone        String?
+  createdAt    DateTime @default(now())
+
+  // Client side
+  requestsMade    ServiceRequest[] @relation("ClientRequests")
+  reviewsWritten  Review[]         @relation("ReviewAuthor")
+
+  // Locksmith side
+  locksmithProfile LocksmithProfile?
+  requestsHandled  ServiceRequest[]  @relation("LocksmithRequests")
+  reviewsReceived  Review[]          @relation("ReviewTarget")
+}
+
+model LocksmithProfile {
+  id              String    @id @default(cuid())
+  user            User      @relation(fields: [userId], references: [id])
+  userId          String    @unique
+  isOnline        Boolean   @default(false)
+  latitude        Float?
+  longitude       Float?
+  lastLocationAt  DateTime?
+  ratingAvg       Float     @default(5)
+  ratingCount     Int       @default(0)
+  bio             String?
+  yearsExperience Int?      @default(0)
+}
+
+model ServiceRequest {
+  id          String @id @default(cuid())
+  client      User   @relation("ClientRequests", fields: [clientId], references: [id])
+  clientId    String
+  locksmith   User?  @relation("LocksmithRequests", fields: [locksmithId], references: [id])
+  locksmithId String?
+
+  issueType   String // DOOR_LOCKOUT | CAR_LOCKOUT | LOCK_CHANGE | BROKEN_KEY | SAFE_OPENING | SECURITY_UPGRADE | OTHER
+  description String?
+  latitude    Float
+  longitude   Float
+  address     String?
+
+  status           String @default("PENDING") // PENDING | ACCEPTED | ARRIVED | COMPLETED | CANCELLED
+  priceEstimateMin Int?
+  priceEstimateMax Int?
+  finalPrice       Int?
+
+  createdAt   DateTime  @default(now())
+  acceptedAt  DateTime?
+  arrivedAt   DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+
+  review Review?
+}
+
+model Review {
+  id        String         @id @default(cuid())
+  request   ServiceRequest @relation(fields: [requestId], references: [id])
+  requestId String         @unique
+  author    User           @relation("ReviewAuthor", fields: [authorId], references: [id])
+  authorId  String
+  target    User           @relation("ReviewTarget", fields: [targetId], references: [id])
+  targetId  String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
