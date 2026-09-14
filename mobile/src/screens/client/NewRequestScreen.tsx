@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Location from "expo-location";
+import * as ImagePicker from "expo-image-picker";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Button } from "../../components/Button";
 import { colors, spacing } from "../../theme";
 import { ClientStackParamList } from "../../navigation/types";
 import { ISSUE_LABELS, IssueType, ServiceRequest } from "../../types";
-import { api, ApiError } from "../../api/client";
+import { api, ApiError, uploadFile } from "../../api/client";
 
 type Props = NativeStackScreenProps<ClientStackParamList, "NewRequest">;
 
@@ -18,6 +19,7 @@ export function NewRequestScreen({ navigation }: Props) {
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locating, setLocating] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -36,6 +38,21 @@ export function NewRequestScreen({ navigation }: Props) {
     })();
   }, []);
 
+  async function handlePickPhoto() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Photos", "Autorisez l'accès aux photos pour joindre une image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.6,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setPhotoUri(result.assets[0].uri);
+    }
+  }
+
   async function handleSubmit() {
     if (!coords) {
       Alert.alert("Position introuvable", "Impossible de récupérer votre position.");
@@ -49,6 +66,17 @@ export function NewRequestScreen({ navigation }: Props) {
         latitude: coords.latitude,
         longitude: coords.longitude,
       });
+
+      if (photoUri) {
+        // Best-effort: a failed photo upload shouldn't block the request itself, the
+        // locksmith can still see the description and location.
+        await uploadFile(`/requests/${res.request.id}/photos`, "photo", {
+          uri: photoUri,
+          name: "issue.jpg",
+          type: "image/jpeg",
+        }).catch((e) => console.warn("Photo upload failed", e));
+      }
+
       navigation.replace("Tracking", { requestId: res.request.id });
     } catch (e) {
       Alert.alert("Erreur", e instanceof ApiError ? e.message : "Impossible de créer la demande");
@@ -82,6 +110,18 @@ export function NewRequestScreen({ navigation }: Props) {
         multiline
         numberOfLines={4}
       />
+
+      <Text style={styles.label}>Photo (optionnel)</Text>
+      {photoUri ? (
+        <View style={styles.photoRow}>
+          <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+          <Button label="Retirer" variant="secondary" onPress={() => setPhotoUri(null)} />
+        </View>
+      ) : (
+        <Button label="Ajouter une photo" variant="secondary" onPress={handlePickPhoto} />
+      )}
+
+      <View style={{ height: spacing.md }} />
 
       <Text style={styles.locationStatus}>
         {locating
@@ -118,4 +158,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   locationStatus: { color: colors.textMuted, marginBottom: spacing.lg, fontSize: 13 },
+  photoRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  photoPreview: { width: 64, height: 64, borderRadius: 8 },
 });

@@ -2,6 +2,7 @@
   "expo": {
     "name": "Serrurier Express",
     "slug": "serrurier-express",
+    "scheme": "serrurierexpress",
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "automatic",

@@ -38,6 +38,9 @@ export function initSockets(server: HttpServer): SocketIOServer {
       "locksmith:online",
       async (data: { latitude: number; longitude: number }) => {
         if (auth.role !== "LOCKSMITH") return;
+        const profile = await prisma.locksmithProfile.findUnique({ where: { userId: auth.userId } });
+        if (profile?.suspended) return; // suspended accounts can't go online
+
         await prisma.locksmithProfile.update({
           where: { userId: auth.userId },
           data: {

@@ -2,6 +2,7 @@
 // SQLite is used for local/dev simplicity; swap the datasource to Postgres for production
 // (Postgres supports native enums — see src/types.ts for the string-literal unions these
 // fields are validated against at the API boundary via zod, since SQLite has no enum type).
+// See README.md "Passer en production" for the SQLite -> PostgreSQL migration steps.
 
 generator client {
   provider = "prisma-client-js"
@@ -16,7 +17,7 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
-  role         String // "CLIENT" | "LOCKSMITH"
+  role         String // "CLIENT" | "LOCKSMITH" | "ADMIN"
   fullName     String
   phone        String?
   pushToken    String? // Expo push token for the device currently logged in
@@ -25,6 +26,7 @@ model User {
   // Client side
   requestsMade    ServiceRequest[] @relation("ClientRequests")
   reviewsWritten  Review[]         @relation("ReviewAuthor")
+  messagesSent    Message[]        @relation("MessageSender")
 
   // Locksmith side
   locksmithProfile LocksmithProfile?
@@ -44,6 +46,18 @@ model LocksmithProfile {
   ratingCount     Int       @default(0)
   bio             String?
   yearsExperience Int?      @default(0)
+
+  // Identity verification
+  idDocumentUrl      String?
+  verificationStatus String  @default("UNVERIFIED") // UNVERIFIED | PENDING | VERIFIED | REJECTED
+
+  // Cancellation policy
+  cancelledJobsCount Int     @default(0)
+  suspended          Boolean @default(false)
+
+  // Stripe Connect (payouts)
+  stripeAccountId  String?
+  stripeOnboarded  Boolean @default(false)
 }
 
 model ServiceRequest {
@@ -63,15 +77,43 @@ model ServiceRequest {
   priceEstimateMin Int?
   priceEstimateMax Int?
   finalPrice       Int?
+  cancellationFee  Int? // charged to the client for a late cancellation once a locksmith was already en route
 
   createdAt    DateTime  @default(now())
   acceptedAt   DateTime?
   arrivedAt    DateTime?
   completedAt  DateTime?
   cancelledAt  DateTime?
-  cancelReason String? // CLIENT_CANCELLED | NO_LOCKSMITH_AVAILABLE
+  cancelReason String? // CLIENT_CANCELLED | LOCKSMITH_CANCELLED | NO_LOCKSMITH_AVAILABLE
+
+  // Payment (Stripe Connect: platform collects from client, transfers to locksmith minus fee)
+  paymentStatus   String  @default("UNPAID") // UNPAID | PENDING | PAID | FAILED
+  paymentIntentId String? @unique
+  paidAt          DateTime?
 
   review Review?
+  photos RequestPhoto[]
+  messages Message[]
+}
+
+model RequestPhoto {
+  id        String         @id @default(cuid())
+  request   ServiceRequest @relation(fields: [requestId], references: [id])
+  requestId String
+  url       String
+  createdAt DateTime       @default(now())
+}
+
+model Message {
+  id        String         @id @default(cuid())
+  request   ServiceRequest @relation(fields: [requestId], references: [id])
+  requestId String
+  sender    User           @relation("MessageSender", fields: [senderId], references: [id])
+  senderId  String
+  body      String
+  createdAt DateTime       @default(now())
+
+  @@index([requestId, createdAt])
 }
 
 model Review {
@@ -85,4 +127,16 @@ model Review {
   rating    Int
   comment   String?
   createdAt DateTime @default(now())
+}
+
+// Admin-adjustable price bands per issue type — overrides the hardcoded defaults in
+// src/utils/geo.ts's estimatePrice() when present. Geographic zoning (e.g. per-city
+// multipliers) is out of scope for this MVP since it would require a geocoding service;
+// see README.md "Pistes pour la suite".
+model PricingRule {
+  id        String   @id @default(cuid())
+  issueType String   @unique
+  priceMin  Int
+  priceMax  Int
+  updatedAt DateTime @updatedAt
 }

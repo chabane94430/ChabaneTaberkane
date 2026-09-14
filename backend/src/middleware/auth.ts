@@ -4,7 +4,7 @@ import { config } from "../config";
 
 export interface AuthPayload {
   userId: string;
-  role: "CLIENT" | "LOCKSMITH";
+  role: "CLIENT" | "LOCKSMITH" | "ADMIN";
 }
 
 declare global {

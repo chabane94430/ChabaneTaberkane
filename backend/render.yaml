@@ -1,0 +1,34 @@
+# Render Blueprint. Connect the repo at https://dashboard.render.com/blueprints and it
+# will pick this up. Set the sync:false env vars in the Render dashboard after the
+# first deploy (they're secrets, not meant to live in git). Requires switching the
+# Prisma datasource to postgresql first — see README.md "Passer en production".
+#
+# NOTE: render.yaml has no built-in support for a persistent disk on a Docker web
+# service in every plan tier — check Render's current disk offering before relying on
+# local file uploads in production, or swap src/uploads.ts for S3-backed storage.
+services:
+  - type: web
+    name: locksmith-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: locksmith-db
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+
+databases:
+  - name: locksmith-db
+    plan: free

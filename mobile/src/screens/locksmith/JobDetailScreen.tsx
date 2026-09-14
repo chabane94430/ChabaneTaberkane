@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Linking, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Linking, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Location from "expo-location";
 import MapView, { Marker } from "react-native-maps";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -8,6 +8,7 @@ import { colors, spacing } from "../../theme";
 import { LocksmithStackParamList } from "../../navigation/types";
 import { ISSUE_LABELS, ServiceRequest } from "../../types";
 import { api, ApiError } from "../../api/client";
+import { assetUrl } from "../../api/config";
 import { getSocket } from "../../api/socket";
 
 type Props = NativeStackScreenProps<LocksmithStackParamList, "JobDetail">;
@@ -83,6 +84,29 @@ export function JobDetailScreen({ route, navigation }: Props) {
     }
   }
 
+  async function doCancel() {
+    setUpdating(true);
+    try {
+      await api.patch(`/requests/${requestId}/status`, { status: "CANCELLED" });
+      navigation.popToTop();
+    } catch (e) {
+      Alert.alert("Erreur", e instanceof ApiError ? e.message : "Impossible d'annuler l'intervention");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  function handleCancel() {
+    Alert.alert(
+      "Annuler cette intervention ?",
+      "Trop d'annulations peuvent suspendre votre compte. Le client sera prévenu immédiatement.",
+      [
+        { text: "Retour", style: "cancel" },
+        { text: "Annuler l'intervention", style: "destructive", onPress: doCancel },
+      ]
+    );
+  }
+
   if (loading || !request) {
     return (
       <View style={styles.center}>
@@ -109,6 +133,13 @@ export function JobDetailScreen({ route, navigation }: Props) {
         <Text style={styles.issue}>{ISSUE_LABELS[request.issueType]}</Text>
         {request.description ? <Text style={styles.description}>{request.description}</Text> : null}
         {request.address ? <Text style={styles.address}>{request.address}</Text> : null}
+        {request.photos && request.photos.length > 0 && (
+          <View style={styles.photoRow}>
+            {request.photos.map((photo) => (
+              <Image key={photo.id} source={{ uri: assetUrl(photo.url) }} style={styles.photoThumb} />
+            ))}
+          </View>
+        )}
 
         <Button
           label="Ouvrir dans le GPS"
@@ -117,6 +148,7 @@ export function JobDetailScreen({ route, navigation }: Props) {
             Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${request.latitude},${request.longitude}`)
           }
         />
+        <Button label="Envoyer un message" variant="secondary" onPress={() => navigation.navigate("Chat", { requestId })} />
 
         {request.status === "ACCEPTED" && (
           <Button label="Je suis arrivé" onPress={markArrived} loading={updating} />
@@ -133,6 +165,10 @@ export function JobDetailScreen({ route, navigation }: Props) {
             />
             <Button label="Terminer l'intervention" onPress={markCompleted} loading={updating} />
           </>
+        )}
+
+        {(request.status === "ACCEPTED" || request.status === "ARRIVED") && (
+          <Button label="Annuler l'intervention" variant="danger" onPress={handleCancel} disabled={updating} />
         )}
       </View>
     </View>
@@ -157,4 +193,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
+  photoRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm },
+  photoThumb: { width: 72, height: 72, borderRadius: 8 },
 });

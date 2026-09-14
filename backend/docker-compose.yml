@@ -1,0 +1,41 @@
+# Local "production-like" stack: Postgres + the backend built from the Dockerfile.
+#
+# IMPORTANT: prisma/schema.prisma ships with `provider = "sqlite"` (zero-setup local
+# dev) and its migrations are SQLite-specific. This compose file targets Postgres, so
+# before running `docker compose up` you must first follow README.md "Passer en
+# production" to switch the datasource to postgresql and generate fresh migrations —
+# otherwise `prisma migrate deploy` in the container will fail with a provider mismatch.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: locksmith
+      POSTGRES_PASSWORD: locksmith
+      POSTGRES_DB: locksmith
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U locksmith"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://locksmith:locksmith@postgres:5432/locksmith
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+
+volumes:
+  postgres_data:
+  uploads_data:

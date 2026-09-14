@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Linking, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Button } from "../../components/Button";
@@ -80,13 +80,29 @@ export function TrackingScreen({ route, navigation }: Props) {
     )
   );
 
-  async function handleCancel() {
+  async function doCancel() {
     try {
-      await api.patch(`/requests/${requestId}/status`, { status: "CANCELLED" });
+      await api.patch<{ request: ServiceRequest }>(`/requests/${requestId}/status`, { status: "CANCELLED" });
       navigation.popToTop();
     } catch (e) {
-      // no-op: surfaced via alert below if truly needed
+      Alert.alert("Erreur", e instanceof ApiError ? e.message : "Impossible d'annuler la demande");
     }
+  }
+
+  function handleCancel() {
+    const locksmithAssigned = request?.status === "ACCEPTED" || request?.status === "ARRIVED";
+    if (!locksmithAssigned) {
+      doCancel();
+      return;
+    }
+    Alert.alert(
+      "Annuler la demande ?",
+      "Un serrurier a déjà accepté votre demande. Annuler maintenant peut entraîner des frais d'annulation tardive.",
+      [
+        { text: "Ne pas annuler", style: "cancel" },
+        { text: "Annuler quand même", style: "destructive", onPress: doCancel },
+      ]
+    );
   }
 
   if (loading || !request) {
@@ -98,12 +114,18 @@ export function TrackingScreen({ route, navigation }: Props) {
   }
 
   if (request.status === "COMPLETED") {
+    const paid = request.paymentStatus === "PAID";
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Intervention terminée</Text>
         <Text style={styles.subtitle}>Montant : {request.finalPrice ?? request.priceEstimateMax} €</Text>
+        {paid && <Text style={styles.paidText}>✓ Payé</Text>}
         <View style={{ height: spacing.lg }} />
-        <Button label="Laisser un avis" onPress={() => navigation.replace("RateJob", { requestId })} />
+        {paid ? (
+          <Button label="Laisser un avis" onPress={() => navigation.replace("RateJob", { requestId })} />
+        ) : (
+          <Button label="Payer l'intervention" onPress={() => navigation.replace("Payment", { requestId })} />
+        )}
       </View>
     );
   }
@@ -118,6 +140,9 @@ export function TrackingScreen({ route, navigation }: Props) {
             ? "Aucun serrurier n'a pu être trouvé près de chez vous pour le moment. Réessayez dans quelques minutes."
             : "Cette demande a été annulée."}
         </Text>
+        {!!request.cancellationFee && (
+          <Text style={styles.feeText}>Frais d'annulation tardive : {request.cancellationFee} €</Text>
+        )}
         <View style={{ height: spacing.lg }} />
         <Button label="Nouvelle demande" onPress={() => navigation.replace("NewRequest")} />
       </View>
@@ -156,6 +181,7 @@ export function TrackingScreen({ route, navigation }: Props) {
                 onPress={() => Linking.openURL(`tel:${locksmith.phone}`)}
               />
             )}
+            <Button label="Envoyer un message" variant="secondary" onPress={() => navigation.navigate("Chat", { requestId })} />
           </View>
         )}
 
@@ -163,7 +189,7 @@ export function TrackingScreen({ route, navigation }: Props) {
           Estimation : {request.priceEstimateMin}–{request.priceEstimateMax} €
         </Text>
 
-        {(request.status === "PENDING" || request.status === "ACCEPTED") && (
+        {(request.status === "PENDING" || request.status === "ACCEPTED" || request.status === "ARRIVED") && (
           <Button label="Annuler la demande" variant="danger" onPress={handleCancel} />
         )}
       </View>
@@ -184,4 +210,6 @@ const styles = StyleSheet.create({
   price: { color: colors.text, marginBottom: spacing.md },
   title: { color: colors.text, fontSize: 22, fontWeight: "700" },
   subtitle: { color: colors.textMuted, marginTop: spacing.xs },
+  paidText: { color: colors.success, marginTop: spacing.sm, fontWeight: "700" },
+  feeText: { color: colors.danger, marginTop: spacing.sm, fontWeight: "600" },
 });

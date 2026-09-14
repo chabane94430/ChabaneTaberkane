@@ -1,0 +1,37 @@
+# Fly.io app config. Deploy with `fly launch` (first time, it will offer to generate
+# this file — you can keep this one) then `fly deploy`. Set secrets first:
+#   fly secrets set JWT_SECRET=... DATABASE_URL=... STRIPE_SECRET_KEY=... STRIPE_WEBHOOK_SECRET=...
+# `fly postgres create` + `fly postgres attach` will provision DATABASE_URL for you.
+# Requires switching the Prisma datasource to postgresql first — see README.md
+# "Passer en production".
+
+app = "serrurier-express-api"
+primary_region = "cdg"
+
+[build]
+
+[env]
+  PORT = "4000"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
+
+[[mounts]]
+  source = "locksmith_uploads"
+  destination = "/app/uploads"

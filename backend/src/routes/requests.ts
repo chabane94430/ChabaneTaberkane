@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { distanceKm, estimatePrice } from "../utils/geo";
+import { distanceKm } from "../utils/geo";
+import { resolvePriceEstimate } from "../pricing";
 import { emitToUser } from "../sockets/index";
 import { config } from "../config";
 import { startMatching, stopMatching } from "../matching";
@@ -35,7 +36,7 @@ requestsRouter.post("/", requireRole("CLIENT"), async (req, res) => {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
   const { issueType, description, latitude, longitude, address } = parsed.data;
-  const { min, max } = estimatePrice(issueType);
+  const { min, max } = await resolvePriceEstimate(issueType);
 
   const request = await prisma.serviceRequest.create({
     data: {
@@ -77,7 +78,7 @@ requestsRouter.get("/mine", async (req, res) => {
   const requests = await prisma.serviceRequest.findMany({
     where: role === "CLIENT" ? { clientId: userId } : { locksmithId: userId },
     orderBy: { createdAt: "desc" },
-    include: { review: true },
+    include: { review: true, photos: true },
   });
   return res.json({ requests });
 });
@@ -104,7 +105,10 @@ requestsRouter.get("/nearby", requireRole("LOCKSMITH"), async (req, res) => {
 
 // GET /requests/:id
 requestsRouter.get("/:id", async (req, res) => {
-  const request = await prisma.serviceRequest.findUnique({ where: { id: req.params.id } });
+  const request = await prisma.serviceRequest.findUnique({
+    where: { id: req.params.id },
+    include: { photos: true },
+  });
   if (!request) return res.status(404).json({ error: "Not found" });
   if (request.clientId !== req.auth!.userId && request.locksmithId !== req.auth!.userId) {
     return res.status(403).json({ error: "Not your request" });
@@ -115,6 +119,11 @@ requestsRouter.get("/:id", async (req, res) => {
 // POST /requests/:id/accept — first locksmith to accept wins (atomic conditional update).
 requestsRouter.post("/:id/accept", requireRole("LOCKSMITH"), async (req, res) => {
   const { id } = req.params;
+
+  const profile = await prisma.locksmithProfile.findUnique({ where: { userId: req.auth!.userId } });
+  if (profile?.suspended) {
+    return res.status(403).json({ error: "Your account is suspended pending review" });
+  }
 
   const result = await prisma.serviceRequest.updateMany({
     where: { id, status: "PENDING" },
@@ -175,7 +184,7 @@ requestsRouter.patch("/:id/status", async (req, res) => {
   const isOwner = request.clientId === userId || request.locksmithId === userId;
   if (!isOwner) return res.status(403).json({ error: "Not your request" });
 
-  if (status === "CANCELLED" && !["PENDING", "ACCEPTED"].includes(request.status)) {
+  if (status === "CANCELLED" && !["PENDING", "ACCEPTED", "ARRIVED"].includes(request.status)) {
     return res.status(409).json({ error: `Cannot cancel a request in status ${request.status}` });
   }
   if ((status === "ARRIVED" || status === "COMPLETED") && role !== "LOCKSMITH") {
@@ -189,6 +198,16 @@ requestsRouter.patch("/:id/status", async (req, res) => {
     stopMatching(request.id);
   }
 
+  // A locksmith was already assigned (en route or on site) — cancelling now has
+  // consequences for whoever caused it, unlike a free PENDING cancellation.
+  const locksmithWasAssigned = request.status === "ACCEPTED" || request.status === "ARRIVED";
+  const cancellationFee =
+    status === "CANCELLED" && role === "CLIENT" && locksmithWasAssigned ? config.lateCancellationFeeEur : undefined;
+
+  if (status === "CANCELLED" && role === "LOCKSMITH" && locksmithWasAssigned) {
+    await applyLocksmithCancellationStrike(userId);
+  }
+
   const updated = await prisma.serviceRequest.update({
     where: { id: request.id },
     data: {
@@ -198,6 +217,7 @@ requestsRouter.patch("/:id/status", async (req, res) => {
       completedAt: status === "COMPLETED" ? new Date() : undefined,
       cancelledAt: status === "CANCELLED" ? new Date() : undefined,
       cancelReason: status === "CANCELLED" ? (role === "CLIENT" ? "CLIENT_CANCELLED" : "LOCKSMITH_CANCELLED") : undefined,
+      cancellationFee,
     },
   });
 
@@ -209,6 +229,25 @@ requestsRouter.patch("/:id/status", async (req, res) => {
 
   return res.json({ request: updated });
 });
+
+async function applyLocksmithCancellationStrike(locksmithUserId: string) {
+  const profile = await prisma.locksmithProfile.update({
+    where: { userId: locksmithUserId },
+    data: { cancelledJobsCount: { increment: 1 } },
+  });
+  if (profile.cancelledJobsCount >= config.maxLocksmithCancellations && !profile.suspended) {
+    await prisma.locksmithProfile.update({
+      where: { userId: locksmithUserId },
+      data: { suspended: true, isOnline: false },
+    });
+    void sendPushNotification(
+      locksmithUserId,
+      "Compte suspendu",
+      "Votre compte a été suspendu suite à plusieurs annulations. Contactez le support.",
+      { type: "account:suspended" }
+    );
+  }
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function statusPushMessage(

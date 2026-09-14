@@ -1,4 +1,4 @@
-export type Role = "CLIENT" | "LOCKSMITH";
+export type Role = "CLIENT" | "LOCKSMITH" | "ADMIN";
 
 export type IssueType =
   | "DOOR_LOCKOUT"
@@ -21,6 +21,10 @@ export const ISSUE_LABELS: Record<IssueType, string> = {
 
 export type RequestStatus = "PENDING" | "ACCEPTED" | "ARRIVED" | "COMPLETED" | "CANCELLED";
 
+export type VerificationStatus = "UNVERIFIED" | "PENDING" | "VERIFIED" | "REJECTED";
+
+export type PaymentStatus = "UNPAID" | "PENDING" | "PAID" | "FAILED";
+
 export interface LocksmithProfile {
   id: string;
   userId: string;
@@ -31,6 +35,11 @@ export interface LocksmithProfile {
   ratingCount: number;
   bio?: string | null;
   yearsExperience?: number | null;
+  idDocumentUrl?: string | null;
+  verificationStatus: VerificationStatus;
+  cancelledJobsCount: number;
+  suspended: boolean;
+  stripeOnboarded: boolean;
 }
 
 export interface User {
@@ -40,6 +49,13 @@ export interface User {
   phone?: string | null;
   role: Role;
   locksmithProfile?: LocksmithProfile;
+}
+
+export interface RequestPhoto {
+  id: string;
+  requestId: string;
+  url: string;
+  createdAt: string;
 }
 
 export interface ServiceRequest {
@@ -55,9 +71,12 @@ export interface ServiceRequest {
   priceEstimateMin?: number | null;
   priceEstimateMax?: number | null;
   finalPrice?: number | null;
+  cancellationFee?: number | null;
   createdAt: string;
   distanceKm?: number;
   cancelReason?: "CLIENT_CANCELLED" | "LOCKSMITH_CANCELLED" | "NO_LOCKSMITH_AVAILABLE" | null;
+  paymentStatus: PaymentStatus;
+  photos?: RequestPhoto[];
 }
 
 export interface LocksmithSummary {
@@ -67,4 +86,12 @@ export interface LocksmithSummary {
   rating?: number;
   latitude?: number;
   longitude?: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  requestId: string;
+  senderId: string;
+  body: string;
+  createdAt: string;
 }

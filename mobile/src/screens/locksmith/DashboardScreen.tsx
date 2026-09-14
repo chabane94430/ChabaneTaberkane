@@ -16,17 +16,19 @@ type Props = NativeStackScreenProps<LocksmithStackParamList, "Dashboard">;
 type IncomingRequest = ServiceRequest & { distanceKm?: number };
 
 export function DashboardScreen({ navigation }: Props) {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [online, setOnline] = useState(false);
   const [incoming, setIncoming] = useState<IncomingRequest[]>([]);
   const [activeJob, setActiveJob] = useState<ServiceRequest | null>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
+  const suspended = user?.locksmithProfile?.suspended ?? false;
 
   const loadActiveJob = useCallback(async () => {
     const res = await api.get<{ requests: ServiceRequest[] }>("/requests/mine");
     const active = res.requests.find((r) => r.status === "ACCEPTED" || r.status === "ARRIVED");
     setActiveJob(active ?? null);
-  }, []);
+    await refreshUser();
+  }, [refreshUser]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", loadActiveJob);
@@ -110,9 +112,20 @@ export function DashboardScreen({ navigation }: Props) {
         <Button label="Déconnexion" variant="secondary" onPress={logout} />
       </View>
 
+      {suspended && (
+        <View style={styles.suspendedBanner}>
+          <Text style={styles.suspendedText}>
+            Compte suspendu suite à plusieurs annulations. Vous ne pouvez plus recevoir de demandes tant qu'un
+            administrateur n'a pas levé la suspension.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.onlineRow}>
-        <Text style={styles.onlineLabel}>{online ? "En ligne — vous recevez des demandes" : "Hors ligne"}</Text>
-        <Switch value={online} onValueChange={handleToggle} trackColor={{ true: colors.primary }} />
+        <Text style={styles.onlineLabel}>
+          {suspended ? "Compte suspendu" : online ? "En ligne — vous recevez des demandes" : "Hors ligne"}
+        </Text>
+        <Switch value={online} onValueChange={handleToggle} trackColor={{ true: colors.primary }} disabled={suspended} />
       </View>
 
       {activeJob && (
@@ -123,7 +136,17 @@ export function DashboardScreen({ navigation }: Props) {
         </View>
       )}
 
-      <Button label="Mes gains" variant="secondary" onPress={() => navigation.navigate("Earnings")} />
+      <View style={styles.actionsRow}>
+        <View style={styles.actionsCol}>
+          <Button label="Mes gains" variant="secondary" onPress={() => navigation.navigate("Earnings")} />
+        </View>
+        <View style={styles.actionsCol}>
+          <Button label="Vérification" variant="secondary" onPress={() => navigation.navigate("IdVerification")} />
+        </View>
+        <View style={styles.actionsCol}>
+          <Button label="Paiements" variant="secondary" onPress={() => navigation.navigate("PayoutSetup")} />
+        </View>
+      </View>
 
       <Text style={styles.sectionTitle}>Demandes à proximité</Text>
       <FlatList
@@ -165,9 +188,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   onlineLabel: { color: colors.text, flex: 1, marginRight: spacing.sm },
+  suspendedBanner: { backgroundColor: colors.danger, borderRadius: 10, padding: spacing.md, marginBottom: spacing.md },
+  suspendedText: { color: "#fff", fontSize: 13 },
   activeCard: { backgroundColor: colors.surfaceAlt, borderRadius: 12, padding: spacing.md, marginBottom: spacing.md, gap: spacing.sm },
   activeTitle: { color: colors.primary, fontWeight: "700" },
   activeIssue: { color: colors.text, marginBottom: spacing.sm },
+  actionsRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
+  actionsCol: { flex: 1 },
   sectionTitle: { color: colors.textMuted, marginTop: spacing.lg, marginBottom: spacing.sm, fontSize: 13 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
   requestCard: { backgroundColor: colors.surface, borderRadius: 10, padding: spacing.md, marginBottom: spacing.sm, gap: spacing.xs },

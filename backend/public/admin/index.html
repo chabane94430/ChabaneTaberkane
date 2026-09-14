@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Serrurier Express — Admin</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0F172A;
+    --surface: #1E293B;
+    --surface-alt: #334155;
+    --primary: #F59E0B;
+    --text: #F8FAFC;
+    --text-muted: #94A3B8;
+    --success: #22C55E;
+    --danger: #EF4444;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header button { background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+
+  nav { display: flex; gap: 4px; padding: 12px 24px 0; background: var(--surface); border-bottom: 1px solid var(--border); }
+  nav button {
+    background: none; border: none; color: var(--text-muted); padding: 10px 16px; cursor: pointer;
+    border-bottom: 2px solid transparent; font-size: 14px;
+  }
+  nav button.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+  main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .hidden { display: none !important; }
+
+  .card { background: var(--surface); border-radius: 12px; padding: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat-value { font-size: 28px; font-weight: 700; color: var(--primary); }
+  .stat-label { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { color: var(--text-muted); font-weight: 600; background: var(--surface-alt); }
+  tr:last-child td { border-bottom: none; }
+
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge-pending { background: #78350f; color: #fbbf24; }
+  .badge-verified, .badge-completed, .badge-paid { background: #14532d; color: #4ade80; }
+  .badge-rejected, .badge-cancelled, .badge-suspended { background: #7f1d1d; color: #fca5a5; }
+  .badge-unverified, .badge-accepted, .badge-arrived { background: #334155; color: #cbd5e1; }
+
+  button.action { background: var(--primary); color: #1A1200; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; font-weight: 700; margin-right: 4px; }
+  button.action.secondary { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+  button.action.danger { background: var(--danger); color: #fff; }
+
+  select, input[type=number], input[type=email], input[type=password] {
+    background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 13px;
+  }
+
+  #login-screen { max-width: 360px; margin: 80px auto; }
+  #login-screen h2 { text-align: center; }
+  #login-screen label { display: block; margin: 12px 0 4px; color: var(--text-muted); }
+  #login-screen input { width: 100%; padding: 10px; }
+  #login-screen button { width: 100%; margin-top: 16px; padding: 10px; background: var(--primary); color: #1A1200; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+  #login-error { color: var(--danger); margin-top: 8px; font-size: 13px; }
+
+  .pricing-row { display: grid; grid-template-columns: 1fr 100px 100px auto; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .pricing-row:last-child { border-bottom: none; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <h2>Serrurier Express — Admin</h2>
+  <div class="card">
+    <label>Email</label>
+    <input id="login-email" type="email" autocomplete="username" />
+    <label>Mot de passe</label>
+    <input id="login-password" type="password" autocomplete="current-password" />
+    <button onclick="login()">Se connecter</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>Serrurier Express — Admin</h1>
+    <button onclick="logout()">Déconnexion</button>
+  </header>
+  <nav>
+    <button class="tab-btn active" data-tab="stats" onclick="showTab('stats')">Statistiques</button>
+    <button class="tab-btn" data-tab="requests" onclick="showTab('requests')">Demandes</button>
+    <button class="tab-btn" data-tab="locksmiths" onclick="showTab('locksmiths')">Serruriers</button>
+    <button class="tab-btn" data-tab="pricing" onclick="showTab('pricing')">Tarifs</button>
+  </nav>
+  <main>
+    <section id="tab-stats"></section>
+    <section id="tab-requests" class="hidden"></section>
+    <section id="tab-locksmiths" class="hidden"></section>
+    <section id="tab-pricing" class="hidden"></section>
+  </main>
+</div>
+
+<script>
+const ISSUE_LABELS = {
+  DOOR_LOCKOUT: "Porte claquée / bloquée",
+  CAR_LOCKOUT: "Clés bloquées dans la voiture",
+  LOCK_CHANGE: "Changer une serrure",
+  BROKEN_KEY: "Clé cassée",
+  SAFE_OPENING: "Ouverture de coffre-fort",
+  SECURITY_UPGRADE: "Renforcer la sécurité",
+  OTHER: "Autre",
+};
+
+let token = localStorage.getItem("admin_token") || "";
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: "Bearer " + token } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ? JSON.stringify(body.error) : "Request failed (" + res.status + ")");
+  return body;
+}
+
+async function login() {
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  const errorEl = document.getElementById("login-error");
+  errorEl.textContent = "";
+  try {
+    const res = await api("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+    if (res.user.role !== "ADMIN") {
+      errorEl.textContent = "Ce compte n'est pas administrateur.";
+      return;
+    }
+    token = res.token;
+    localStorage.setItem("admin_token", token);
+    showApp();
+  } catch (e) {
+    errorEl.textContent = e.message || "Connexion impossible";
+  }
+}
+
+function logout() {
+  token = "";
+  localStorage.removeItem("admin_token");
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
+}
+
+function showApp() {
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  showTab("stats");
+}
+
+function showTab(name) {
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll("main > section").forEach((s) => s.classList.toggle("hidden", s.id !== "tab-" + name));
+  if (name === "stats") loadStats();
+  if (name === "requests") loadRequests();
+  if (name === "locksmiths") loadLocksmiths();
+  if (name === "pricing") loadPricing();
+}
+
+function badge(text, className) {
+  return '<span class="badge badge-' + className + '">' + text + "</span>";
+}
+
+async function loadStats() {
+  const el = document.getElementById("tab-stats");
+  el.innerHTML = "Chargement...";
+  try {
+    const s = await api("/admin/stats");
+    const byStatus = s.requestsByStatus || {};
+    el.innerHTML =
+      '<div class="grid">' +
+      stat(s.clientCount, "Clients") +
+      stat(s.locksmithCount, "Serruriers") +
+      stat(s.totalRevenue + " €", "Revenu total (payé)") +
+      stat(s.paidRequestCount, "Interventions payées") +
+      stat(s.pendingVerifications, "Vérifications en attente") +
+      stat(s.suspendedLocksmiths, "Serruriers suspendus") +
+      "</div>" +
+      '<div class="card"><h3>Demandes par statut</h3>' +
+      Object.entries(byStatus).map(([k, v]) => k + ": <b>" + v + "</b>").join(" &nbsp;·&nbsp; ") +
+      "</div>";
+  } catch (e) {
+    el.innerHTML = "Erreur : " + e.message;
+  }
+}
+function stat(value, label) {
+  return '<div class="card"><div class="stat-value">' + value + '</div><div class="stat-label">' + label + "</div></div>";
+}
+
+async function loadRequests() {
+  const el = document.getElementById("tab-requests");
+  el.innerHTML = "Chargement...";
+  try {
+    const { requests } = await api("/admin/requests?limit=100");
+    el.innerHTML =
+      "<table><thead><tr><th>Date</th><th>Client</th><th>Serrurier</th><th>Type</th><th>Statut</th><th>Prix</th><th>Paiement</th></tr></thead><tbody>" +
+      requests
+        .map(
+          (r) =>
+            "<tr><td>" +
+            new Date(r.createdAt).toLocaleString() +
+            "</td><td>" +
+            (r.client ? r.client.fullName : "—") +
+            "</td><td>" +
+            (r.locksmith ? r.locksmith.fullName : "—") +
+            "</td><td>" +
+            (ISSUE_LABELS[r.issueType] || r.issueType) +
+            "</td><td>" +
+            badge(r.status, r.status.toLowerCase()) +
+            "</td><td>" +
+            (r.finalPrice != null ? r.finalPrice + " €" : (r.priceEstimateMin + "–" + r.priceEstimateMax + " €")) +
+            "</td><td>" +
+            badge(r.paymentStatus, r.paymentStatus.toLowerCase()) +
+            "</td></tr>"
+        )
+        .join("") +
+      "</tbody></table>";
+  } catch (e) {
+    el.innerHTML = "Erreur : " + e.message;
+  }
+}
+
+async function loadLocksmiths() {
+  const el = document.getElementById("tab-locksmiths");
+  el.innerHTML = "Chargement...";
+  try {
+    const { locksmiths } = await api("/admin/locksmiths");
+    el.innerHTML =
+      "<table><thead><tr><th>Nom</th><th>Email</th><th>Note</th><th>Vérification</th><th>Annulations</th><th>Statut</th><th>Actions</th></tr></thead><tbody>" +
+      locksmiths
+        .map((u) => {
+          const p = u.locksmithProfile || {};
+          return (
+            "<tr><td>" +
+            u.fullName +
+            "</td><td>" +
+            u.email +
+            "</td><td>★ " +
+            (p.ratingAvg != null ? p.ratingAvg.toFixed(1) : "—") +
+            "</td><td>" +
+            badge(p.verificationStatus || "UNVERIFIED", (p.verificationStatus || "unverified").toLowerCase()) +
+            "</td><td>" +
+            (p.cancelledJobsCount ?? 0) +
+            "</td><td>" +
+            (p.suspended ? badge("Suspendu", "suspended") : badge("Actif", "verified")) +
+            "</td><td>" +
+            (p.verificationStatus === "PENDING"
+              ? '<button class="action" onclick="setVerification(\'' + u.id + "', 'VERIFIED')\">Approuver</button>" +
+                '<button class="action danger" onclick="setVerification(\'' + u.id + "', 'REJECTED')\">Rejeter</button>"
+              : "") +
+            (p.suspended
+              ? '<button class="action secondary" onclick="setSuspended(\'' + u.id + "', false)\">Réactiver</button>"
+              : '<button class="action danger" onclick="setSuspended(\'' + u.id + "', true)\">Suspendre</button>") +
+            "</td></tr>"
+          );
+        })
+        .join("") +
+      "</tbody></table>";
+  } catch (e) {
+    el.innerHTML = "Erreur : " + e.message;
+  }
+}
+
+async function setVerification(userId, status) {
+  try {
+    await api("/admin/locksmiths/" + userId + "/verification", { method: "PATCH", body: JSON.stringify({ status }) });
+    loadLocksmiths();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function setSuspended(userId, suspended) {
+  try {
+    await api("/admin/locksmiths/" + userId + "/suspend", { method: "PATCH", body: JSON.stringify({ suspended }) });
+    loadLocksmiths();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function loadPricing() {
+  const el = document.getElementById("tab-pricing");
+  el.innerHTML = "Chargement...";
+  try {
+    const { rules } = await api("/admin/pricing-rules");
+    const rulesByType = Object.fromEntries(rules.map((r) => [r.issueType, r]));
+    el.innerHTML =
+      '<div class="card"><p style="color:var(--text-muted)">Laissez vide pour utiliser le tarif par défaut de l\'application.</p>' +
+      Object.keys(ISSUE_LABELS)
+        .map((type) => {
+          const rule = rulesByType[type];
+          return (
+            '<div class="pricing-row"><div>' +
+            ISSUE_LABELS[type] +
+            '</div><input type="number" id="min-' +
+            type +
+            '" placeholder="Min €" value="' +
+            (rule ? rule.priceMin : "") +
+            '" /><input type="number" id="max-' +
+            type +
+            '" placeholder="Max €" value="' +
+            (rule ? rule.priceMax : "") +
+            '" /><div><button class="action" onclick="savePricing(\'' +
+            type +
+            "')\">Enregistrer</button>" +
+            (rule ? '<button class="action secondary" onclick="resetPricing(\'' + type + "')\">Réinitialiser</button>" : "") +
+            "</div></div>"
+          );
+        })
+        .join("") +
+      "</div>";
+  } catch (e) {
+    el.innerHTML = "Erreur : " + e.message;
+  }
+}
+
+async function savePricing(type) {
+  const priceMin = Number(document.getElementById("min-" + type).value);
+  const priceMax = Number(document.getElementById("max-" + type).value);
+  if (!priceMin || !priceMax) {
+    alert("Indiquez un prix min et max.");
+    return;
+  }
+  try {
+    await api("/admin/pricing-rules/" + type, { method: "PUT", body: JSON.stringify({ priceMin, priceMax }) });
+    loadPricing();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function resetPricing(type) {
+  try {
+    await api("/admin/pricing-rules/" + type, { method: "DELETE" });
+    loadPricing();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+if (token) showApp();
+</script>
+</body>
+</html>

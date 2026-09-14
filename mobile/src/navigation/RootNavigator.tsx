@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { NavigationContainer, DarkTheme, createNavigationContainerRef } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import { useAuth } from "../context/AuthContext";
@@ -17,7 +17,7 @@ const navTheme = {
 export const navigationRef = createNavigationContainerRef();
 
 interface NotificationData {
-  type?: "request:new" | "request:accepted" | "request:status";
+  type?: "request:new" | "request:accepted" | "request:status" | "message:new";
   requestId?: string;
 }
 
@@ -31,6 +31,11 @@ function navigateFromNotification(data: NotificationData, role: User["role"]) {
   // so it can't carry a single precise ParamList — the routes below are guaranteed to
   // exist for the role we check against.
   const navigate = navigationRef.navigate as (name: string, params: object) => void;
+
+  if (data.type === "message:new") {
+    navigate("Chat", { requestId: data.requestId });
+    return;
+  }
 
   if (role === "CLIENT") {
     navigate("Tracking", { requestId: data.requestId });
@@ -56,6 +61,19 @@ export function RootNavigator() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (user?.role === "ADMIN") {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <Text style={{ color: colors.text, fontSize: 18, fontWeight: "700", textAlign: "center" }}>
+          Le back-office admin se gère depuis le web
+        </Text>
+        <Text style={{ color: colors.textMuted, marginTop: 8, textAlign: "center" }}>
+          Ouvrez {"{API_URL}"}/admin dans un navigateur.
+        </Text>
       </View>
     );
   }

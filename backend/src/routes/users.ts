@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { uploadIdDocument, publicUrlFor } from "../uploads";
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
@@ -31,6 +32,23 @@ usersRouter.patch("/me/locksmith-profile", requireRole("LOCKSMITH"), async (req,
     data: parsed.data,
   });
   return res.json({ profile });
+});
+
+// POST /users/me/locksmith-profile/id-document — locksmith uploads an ID document
+// (multipart/form-data, field "document") for manual admin review; the mobile app
+// stays fully usable while UNVERIFIED, this is purely a trust signal shown to clients
+// and reviewed in the admin back-office (see routes/admin.ts).
+usersRouter.post("/me/locksmith-profile/id-document", requireRole("LOCKSMITH"), (req, res) => {
+  uploadIdDocument(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "No document uploaded (expected field 'document')" });
+
+    const profile = await prisma.locksmithProfile.update({
+      where: { userId: req.auth!.userId },
+      data: { idDocumentUrl: publicUrlFor("ids", req.file.filename), verificationStatus: "PENDING" },
+    });
+    return res.status(201).json({ profile });
+  });
 });
 
 const pushTokenSchema = z.object({ token: z.string().min(1) });
