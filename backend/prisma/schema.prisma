@@ -19,6 +19,7 @@ model User {
   role         String // "CLIENT" | "LOCKSMITH"
   fullName     String
   phone        String?
+  pushToken    String? // Expo push token for the device currently logged in
   createdAt    DateTime @default(now())
 
   // Client side

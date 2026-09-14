@@ -2,6 +2,8 @@ import { prisma } from "./db";
 import { config } from "./config";
 import { distanceKm } from "./utils/geo";
 import { emitToUser } from "./sockets/index";
+import { sendPushNotification } from "./push";
+import { ISSUE_LABELS } from "./issueLabels";
 
 // In-memory, per-process matching state: for each PENDING request being actively
 // broadcast, tracks which locksmiths have already been notified and the current
@@ -69,6 +71,12 @@ async function tick(requestId: string) {
   for (const locksmith of newlyInRange) {
     const d = distanceKm(request.latitude, request.longitude, locksmith.latitude!, locksmith.longitude!);
     emitToUser(locksmith.userId, "request:new", { ...request, distanceKm: Math.round(d * 10) / 10 });
+    void sendPushNotification(
+      locksmith.userId,
+      "Nouvelle demande à proximité",
+      `${ISSUE_LABELS[request.issueType] ?? request.issueType} · à ${Math.round(d * 10) / 10} km`,
+      { type: "request:new", requestId: request.id }
+    );
     current.notified.add(locksmith.userId);
   }
 
@@ -92,7 +100,14 @@ async function expireRequest(requestId: string) {
   if (result.count === 0) return;
 
   const request = await prisma.serviceRequest.findUnique({ where: { id: requestId } });
-  if (request) emitToUser(request.clientId, "request:status", { request });
+  if (!request) return;
+  emitToUser(request.clientId, "request:status", { request });
+  void sendPushNotification(
+    request.clientId,
+    "Aucun serrurier disponible",
+    "Nous n'avons trouvé aucun serrurier disponible près de chez vous pour le moment.",
+    { type: "request:status", requestId: request.id, status: "CANCELLED" }
+  );
 }
 
 /** Call once at process startup so a restart doesn't leave PENDING requests stuck forever. */

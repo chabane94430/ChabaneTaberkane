@@ -6,6 +6,8 @@ import { distanceKm, estimatePrice } from "../utils/geo";
 import { emitToUser } from "../sockets/index";
 import { config } from "../config";
 import { startMatching, stopMatching } from "../matching";
+import { sendPushNotification } from "../push";
+import { ISSUE_LABELS } from "../issueLabels";
 
 export const requestsRouter = Router();
 requestsRouter.use(requireAuth);
@@ -51,6 +53,12 @@ requestsRouter.post("/", requireRole("CLIENT"), async (req, res) => {
   const nearby = await findNearbyOnlineLocksmiths(latitude, longitude, config.broadcastRadiusKm);
   for (const locksmith of nearby) {
     emitToUser(locksmith.userId, "request:new", serializeRequestForLocksmith(request, locksmith.distanceKm));
+    void sendPushNotification(
+      locksmith.userId,
+      "Nouvelle demande à proximité",
+      `${ISSUE_LABELS[issueType]} · à ${Math.round(locksmith.distanceKm * 10) / 10} km`,
+      { type: "request:new", requestId: request.id }
+    );
   }
   // If nobody accepts in time, this keeps re-broadcasting with a wider radius until
   // someone does, or gives up and auto-cancels the request (see src/matching.ts).
@@ -137,6 +145,12 @@ requestsRouter.post("/:id/accept", requireRole("LOCKSMITH"), async (req, res) =>
         }
       : undefined,
   });
+  void sendPushNotification(
+    request!.clientId,
+    "Serrurier en route",
+    locksmith ? `${locksmith.fullName} a accepté votre demande et arrive.` : "Un serrurier a accepté votre demande.",
+    { type: "request:accepted", requestId: request!.id }
+  );
 
   return res.json({ request });
 });
@@ -190,10 +204,33 @@ requestsRouter.patch("/:id/status", async (req, res) => {
   const otherPartyId = userId === request.clientId ? request.locksmithId : request.clientId;
   if (otherPartyId) {
     emitToUser(otherPartyId, "request:status", { request: updated });
+    void sendPushNotification(otherPartyId, ...statusPushMessage(status, updated));
   }
 
   return res.json({ request: updated });
 });
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function statusPushMessage(
+  status: "ARRIVED" | "COMPLETED" | "CANCELLED",
+  request: any
+): [string, string, Record<string, unknown>] {
+  const data = { type: "request:status", requestId: request.id, status };
+  switch (status) {
+    case "ARRIVED":
+      return ["Le serrurier est arrivé", "Votre serrurier est sur place.", data];
+    case "COMPLETED":
+      return ["Intervention terminée", `Montant : ${request.finalPrice ?? request.priceEstimateMax} €`, data];
+    case "CANCELLED":
+      return [
+        "Demande annulée",
+        request.cancelReason === "LOCKSMITH_CANCELLED"
+          ? "Le serrurier a annulé cette intervention."
+          : "La demande a été annulée.",
+        data,
+      ];
+  }
+}
 
 async function findNearbyOnlineLocksmiths(latitude: number, longitude: number, radiusKm: number) {
   const online = await prisma.locksmithProfile.findMany({

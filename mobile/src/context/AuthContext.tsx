@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api, setAuthToken } from "../api/client";
 import { connectSocket, disconnectSocket } from "../api/socket";
+import { clearPushToken, syncPushToken } from "../notifications";
 import { Role, User } from "../types";
 
 const STORAGE_KEY = "locksmith-app/session";
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setToken(saved.token);
           setUser(saved.user);
           connectSocket(saved.token);
+          void syncPushToken();
         }
       } finally {
         setLoading(false);
@@ -54,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(nextUser);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ token: nextToken, user: nextUser }));
     connectSocket(nextToken);
+    void syncPushToken();
   }, []);
 
   const login = useCallback(
@@ -73,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    await clearPushToken();
     setAuthToken(undefined);
     setToken(undefined);
     setUser(undefined);

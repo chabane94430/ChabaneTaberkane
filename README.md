@@ -106,6 +106,12 @@ npm start
 
 Puis ouvrez l'app dans Expo Go (scan du QR code) ou un simulateur iOS/Android.
 
+> Les notifications push nécessitent un **appareil physique** (pas de token
+> push sur simulateur) et, pour un build EAS autonome (hors Expo Go), un
+> `projectId` EAS renseigné dans `app.json` sous `extra.eas.projectId` — sans
+> quoi l'app continue de fonctionner normalement, simplement sans push (le
+> WebSocket reste actif pour le temps réel pendant que l'app est ouverte).
+
 > **Limite connue de cet environnement de développement** : ce sandbox ne
 > dispose pas de simulateur iOS/Android ni d'appareil physique pour lancer
 > l'app visuellement. Le code a été vérifié par `tsc --noEmit` (0 erreur) et
@@ -134,13 +140,21 @@ Puis ouvrez l'app dans Expo Go (scan du QR code) ou un simulateur iOS/Android.
   jamais trouvé, la demande passe automatiquement en `CANCELLED` avec
   `cancelReason: NO_LOCKSMITH_AVAILABLE`, et le client en est informé en
   direct via WebSocket (voir `backend/src/matching.ts`)
+- **Notifications push (Expo)** en complément du WebSocket, pour toucher
+  l'utilisateur même quand l'app est en arrière-plan ou fermée : nouvelle
+  demande à proximité (serrurier), demande acceptée / serrurier arrivé /
+  intervention terminée / annulée / aucun serrurier trouvé (client). Le
+  token push de l'appareil est enregistré après connexion
+  (`PATCH /users/me/push-token`) et effacé à la déconnexion ; l'envoi est en
+  best-effort et ne bloque jamais une requête si Expo est indisponible ou si
+  l'appareil n'a pas de token valide (voir `backend/src/push.ts` et
+  `mobile/src/notifications.ts`). Un tap sur la notification ouvre
+  directement le suivi (client) ou l'intervention en cours (serrurier).
 
 ## Pistes pour la suite
 
 - Paiement in-app (Stripe Connect pour reverser les serruriers)
 - Photos jointes à la demande, pièce d'identité / vérification des serruriers
-- Notifications push (Expo Notifications) en plus du WebSocket pour les
-  alertes quand l'app est en arrière-plan
 - Chat texte client ↔ serrurier
 - Système d'annulation avec pénalité en cas d'abandon tardif
 - Back-office admin (modération, litiges, tarifs par zone)
